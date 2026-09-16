@@ -1,0 +1,12 @@
+TEAM_ID=
+
+PRODUCT_NAME=KMPCleanArchSample
+PRODUCT_BUNDLE_IDENTIFIER=ru.marwinka.kmpcleanarchsample.KMPCleanArchSample$(TEAM_ID)
+
+CURRENT_PROJECT_VERSION=1
+MARKETING_VERSION=1.0
+
+// The static Shared.framework links SQLDelight's native (sqliter) driver,
+// whose cinterop needs libsqlite3 — a static framework does not carry that
+// transitive dependency into the app's own link step, so it is added here.
+OTHER_LDFLAGS=$(inherited) -lsqlite3
