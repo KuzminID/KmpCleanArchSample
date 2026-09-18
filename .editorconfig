@@ -1,0 +1,13 @@
+root = true
+
+[*.{kt,kts}]
+# Composable-функции пишутся с большой буквы (PascalCase) по конвенции Compose —
+# это не нарушение стиля, а требование самого фреймворка.
+ktlint_standard_function-naming = disabled
+
+[**/build/**]
+# Сгенерированный код (Compose Resources Res.kt и т.п.) не наш стиль — не линтим его.
+# ktlint-gradle игнорирует `filter { exclude(...) }` для *SourceSetFormat/*SourceSetCheck
+# тасков в KMP-проектах (см. https://github.com/JLLeitschuh/ktlint-gradle/issues/751),
+# поэтому исключаем через .editorconfig, который сам ktlint читает напрямую.
+ktlint_standard = disabled

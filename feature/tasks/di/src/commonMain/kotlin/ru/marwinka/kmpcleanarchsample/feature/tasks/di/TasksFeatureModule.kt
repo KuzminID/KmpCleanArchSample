@@ -8,10 +8,11 @@ import ru.marwinka.kmpcleanarchsample.feature.tasks.domain.usecase.RefreshTasksU
 import ru.marwinka.kmpcleanarchsample.feature.tasks.domain.usecase.ToggleTaskDoneUseCase
 import ru.marwinka.kmpcleanarchsample.feature.tasks.presentation.TasksScreenModel
 
-val tasksFeatureModule = module {
-    single<TaskRepository> { TaskRepositoryImpl(get(), get()) }
-    factory { GetActiveTasksUseCase(get()) }
-    factory { RefreshTasksUseCase(get()) }
-    factory { ToggleTaskDoneUseCase(get()) }
-    factory { TasksScreenModel(get(), get(), get()) }
-}
+val tasksFeatureModule =
+    module {
+        single<TaskRepository> { TaskRepositoryImpl(get(), get()) }
+        factory { GetActiveTasksUseCase(get()) }
+        factory { RefreshTasksUseCase(get()) }
+        factory { ToggleTaskDoneUseCase(get()) }
+        factory { TasksScreenModel(get(), get(), get()) }
+    }

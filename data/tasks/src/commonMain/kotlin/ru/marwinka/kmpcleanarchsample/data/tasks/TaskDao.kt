@@ -18,7 +18,10 @@ interface TaskDao {
     suspend fun upsertAll(tasks: List<TaskEntity>)
 
     @Query("UPDATE taskEntity SET status = 'DONE', completedAt = :completedAt WHERE id = :id")
-    suspend fun markDone(id: String, completedAt: Long)
+    suspend fun markDone(
+        id: String,
+        completedAt: Long,
+    )
 
     @Query("SELECT COUNT(*) FROM taskEntity")
     suspend fun count(): Long

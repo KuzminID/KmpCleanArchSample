@@ -11,13 +11,15 @@ import ru.marwinka.kmpcleanarchsample.feature.history.domain.usecase.GetTaskHist
 
 sealed interface HistoryUiState {
     data object Loading : HistoryUiState
-    data class Content(val entries: List<TaskHistoryEntry>) : HistoryUiState
+
+    data class Content(
+        val entries: List<TaskHistoryEntry>,
+    ) : HistoryUiState
 }
 
 class HistoryScreenModel(
     private val getTaskHistory: GetTaskHistoryUseCase,
 ) : ScreenModel {
-
     private val _state = MutableStateFlow<HistoryUiState>(HistoryUiState.Loading)
     val state: StateFlow<HistoryUiState> = _state.asStateFlow()
 

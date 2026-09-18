@@ -4,6 +4,17 @@ plugins {
     // RU: это нужно, чтобы плагины не загружались повторно в classloader'е каждого подпроекта
     alias(libs.plugins.androidApplication) apply false
     alias(libs.plugins.composeCompiler) apply false
+    alias(libs.plugins.ktlint) apply false
+}
+
+subprojects {
+    apply(plugin = "org.jlleitschuh.gradle.ktlint")
+    extensions.configure<org.jlleitschuh.gradle.ktlint.KtlintExtension> {
+        // Сгенерированный код (Compose Resources Res.kt и т.п.) не наш стиль — не линтим его.
+        filter {
+            exclude("**/build/**")
+        }
+    }
 }
 
 // Генератор скелета новой фичи: domain/data/presentation/di как отдельные Gradle-модули,

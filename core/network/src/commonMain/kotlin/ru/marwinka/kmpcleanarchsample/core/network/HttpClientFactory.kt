@@ -11,19 +11,20 @@ import kotlinx.serialization.json.Json
  Базовый HTTP-клиент, общий для всех удалённых источников данных. Ничего
  не знает о конкретных эндпоинтах — это забота источника данных, который его использует.
  */
-fun createHttpClient(): HttpClient = HttpClient {
-    expectSuccess = true
+fun createHttpClient(): HttpClient =
+    HttpClient {
+        expectSuccess = true
 
-    install(ContentNegotiation) {
-        json(
-            Json {
-                ignoreUnknownKeys = true
-                isLenient = true
-            }
-        )
-    }
+        install(ContentNegotiation) {
+            json(
+                Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                },
+            )
+        }
 
-    install(Logging) {
-        level = LogLevel.INFO
+        install(Logging) {
+            level = LogLevel.INFO
+        }
     }
-}

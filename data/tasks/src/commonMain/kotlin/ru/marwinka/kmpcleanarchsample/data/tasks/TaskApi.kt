@@ -23,11 +23,12 @@ class FakeTaskApi : TaskApi {
     }
 
     private companion object {
-        val seedTasks = listOf(
-            TaskDto(id = "1", title = "Набросать граф Gradle-модулей"),
-            TaskDto(id = "2", title = "Настроить SQLDelight"),
-            TaskDto(id = "3", title = "Подключить Koin"),
-            TaskDto(id = "4", title = "Собрать iOS-фреймворк"),
-        )
+        val seedTasks =
+            listOf(
+                TaskDto(id = "1", title = "Набросать граф Gradle-модулей"),
+                TaskDto(id = "2", title = "Настроить SQLDelight"),
+                TaskDto(id = "3", title = "Подключить Koin"),
+                TaskDto(id = "4", title = "Собрать iOS-фреймворк"),
+            )
     }
 }

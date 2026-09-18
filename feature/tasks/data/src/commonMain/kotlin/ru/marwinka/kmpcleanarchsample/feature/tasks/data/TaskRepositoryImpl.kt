@@ -1,7 +1,5 @@
 package ru.marwinka.kmpcleanarchsample.feature.tasks.data
 
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import ru.marwinka.kmpcleanarchsample.data.tasks.TaskApi
@@ -9,22 +7,23 @@ import ru.marwinka.kmpcleanarchsample.data.tasks.TaskDao
 import ru.marwinka.kmpcleanarchsample.data.tasks.TaskEntity
 import ru.marwinka.kmpcleanarchsample.feature.tasks.domain.model.Task
 import ru.marwinka.kmpcleanarchsample.feature.tasks.domain.repository.TaskRepository
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
 class TaskRepositoryImpl(
     private val dao: TaskDao,
     private val api: TaskApi,
 ) : TaskRepository {
-
-    override fun observeActive(): Flow<List<Task>> =
-        dao.observeActive().map { rows -> rows.map { it.toDomain() } }
+    override fun observeActive(): Flow<List<Task>> = dao.observeActive().map { rows -> rows.map { it.toDomain() } }
 
     override suspend fun refresh() {
         if (dao.count() > 0) return
         val now = Clock.System.now().toEpochMilliseconds()
-        val seeded = api.fetchTasks().map { dto ->
-            TaskEntity(id = dto.id, title = dto.title, status = STATUS_ACTIVE, createdAt = now, completedAt = null)
-        }
+        val seeded =
+            api.fetchTasks().map { dto ->
+                TaskEntity(id = dto.id, title = dto.title, status = STATUS_ACTIVE, createdAt = now, completedAt = null)
+            }
         dao.upsertAll(seeded)
     }
 

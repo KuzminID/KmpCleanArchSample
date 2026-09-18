@@ -25,27 +25,29 @@ data object HistoryScreen : Screen {
         val state by screenModel.state.collectAsState()
 
         when (val current = state) {
-            is HistoryUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("...")
-            }
-
-            is HistoryUiState.Content -> if (current.entries.isEmpty()) {
+            is HistoryUiState.Loading ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Пока нет завершённых задач")
+                    Text("...")
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(current.entries, key = { it.id }) { entry ->
-                        TaskCard(
-                            title = entry.title,
-                            trailingText = "${entry.durationMillis / 60_000} мин",
-                        )
+
+            is HistoryUiState.Content ->
+                if (current.entries.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Пока нет завершённых задач")
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(current.entries, key = { it.id }) { entry ->
+                            TaskCard(
+                                title = entry.title,
+                                trailingText = "${entry.durationMillis / 60_000} мин",
+                            )
+                        }
                     }
                 }
-            }
         }
     }
 }

@@ -29,27 +29,30 @@ data object TasksScreen : Screen {
         val state by screenModel.state.collectAsState()
 
         when (val current = state) {
-            is TasksUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-
-            is TasksUiState.Error -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(current.message)
-            }
-
-            is TasksUiState.Content -> LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(current.tasks, key = { it.id }) { task ->
-                    TaskCard(
-                        title = task.title,
-                        checked = false,
-                        onCheckedChange = { screenModel.onTaskDone(task.id) },
-                        onClick = { navigator.push(TaskDetailsScreen(taskId = task.id, title = task.title)) },
-                    )
+            is TasksUiState.Loading ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
                 }
-            }
+
+            is TasksUiState.Error ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(current.message)
+                }
+
+            is TasksUiState.Content ->
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(current.tasks, key = { it.id }) { task ->
+                        TaskCard(
+                            title = task.title,
+                            checked = false,
+                            onCheckedChange = { screenModel.onTaskDone(task.id) },
+                            onClick = { navigator.push(TaskDetailsScreen(taskId = task.id, title = task.title)) },
+                        )
+                    }
+                }
         }
     }
 }

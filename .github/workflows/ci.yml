@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Ktlint
+        run: ./gradlew ktlintCheck
+
+      - name: Unit tests (iosSimulatorArm64Test)
+        run: ./gradlew allTests
+
+      - name: Android debug APK
+        run: ./gradlew :androidApp:assembleDebug
+
+      - name: iOS build (simulator, no signing)
+        run: |
+          xcodebuild build \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+
+      # Артефакты только на push в main/теги — CD-часть шаблона без внешних сервисов
+      - name: Upload Android debug APK
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: androidApp/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload iOS simulator build
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-app
+          path: ~/Library/Developer/Xcode/DerivedData/**/Build/Products/Debug-iphonesimulator/*.app
+          if-no-files-found: error

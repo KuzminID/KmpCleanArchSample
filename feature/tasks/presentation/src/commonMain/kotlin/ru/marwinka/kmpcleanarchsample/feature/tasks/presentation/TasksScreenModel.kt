@@ -15,8 +15,14 @@ import ru.marwinka.kmpcleanarchsample.feature.tasks.domain.usecase.ToggleTaskDon
 
 sealed interface TasksUiState {
     data object Loading : TasksUiState
-    data class Content(val tasks: List<Task>) : TasksUiState
-    data class Error(val message: String) : TasksUiState
+
+    data class Content(
+        val tasks: List<Task>,
+    ) : TasksUiState
+
+    data class Error(
+        val message: String,
+    ) : TasksUiState
 }
 
 class TasksScreenModel(
@@ -24,7 +30,6 @@ class TasksScreenModel(
     private val refreshTasks: RefreshTasksUseCase,
     private val toggleTaskDone: ToggleTaskDoneUseCase,
 ) : ScreenModel {
-
     private val _state = MutableStateFlow<TasksUiState>(TasksUiState.Loading)
     val state: StateFlow<TasksUiState> = _state.asStateFlow()
 

@@ -10,14 +10,13 @@ import ru.marwinka.kmpcleanarchsample.feature.history.domain.repository.TaskHist
 class TaskHistoryRepositoryImpl(
     private val dao: TaskDao,
 ) : TaskHistoryRepository {
+    override fun observeHistory(): Flow<List<TaskHistoryEntry>> = dao.observeDone().map { rows -> rows.map { it.toDomain() } }
 
-    override fun observeHistory(): Flow<List<TaskHistoryEntry>> =
-        dao.observeDone().map { rows -> rows.map { it.toDomain() } }
-
-    private fun TaskEntity.toDomain() = TaskHistoryEntry(
-        id = id,
-        title = title,
-        completedAtEpochMillis = completedAt ?: createdAt,
-        durationMillis = (completedAt ?: createdAt) - createdAt,
-    )
+    private fun TaskEntity.toDomain() =
+        TaskHistoryEntry(
+            id = id,
+            title = title,
+            completedAtEpochMillis = completedAt ?: createdAt,
+            durationMillis = (completedAt ?: createdAt) - createdAt,
+        )
 }
