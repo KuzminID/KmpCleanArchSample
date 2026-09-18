@@ -11,6 +11,9 @@ kotlin {
     }
 }
 
+// Единственный источник правды для базового пакета — см. gradle.properties
+val rootPackage = providers.gradleProperty("rootPackage").get()
+
 dependencies {
     implementation(project(":shared"))
 
@@ -23,14 +26,14 @@ dependencies {
 }
 
 android {
-    namespace = "ru.marwinka.kmpcleanarchsample"
+    namespace = rootPackage
     compileSdk =
         libs.versions.android.compileSdk
             .get()
             .toInt()
 
     defaultConfig {
-        applicationId = "ru.marwinka.kmpcleanarchsample"
+        applicationId = rootPackage
         minSdk =
             libs.versions.android.minSdk
                 .get()

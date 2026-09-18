@@ -22,6 +22,27 @@ Compose Multiplatform, организованного по принципам ч
 
 Версии всех зависимостей зафиксированы в [gradle/libs.versions.toml](gradle/libs.versions.toml).
 
+## Использование как шаблона
+
+Перед началом работы над новым проектом на основе этого репозитория замените
+базовый пакет `ru.marwinka.kmpcleanarchsample` и имя `KMPCleanArchSample` одной
+командой:
+
+```bash
+./scripts/rename-template.sh com.acme.myapp AcmeApp
+```
+
+Без аргументов скрипт спросит новые значения интерактивно; `--dry-run` покажет,
+что изменится, ничего не трогая. Скрипт требует чистое git-дерево (коммитит или
+откладывает свои изменения перед запуском) и сам прогоняет `ktlintFormat` в конце,
+т.к. смена пакета почти всегда меняет алфавитный порядок импортов.
+
+Что скрипт **не** трогает: `TEAM_ID`/подпись в
+[iosApp/Configuration/Config.xcconfig](iosApp/Configuration/Config.xcconfig) (это
+вы настраиваете сами под свой Apple Developer аккаунт) и внутренние ID
+convention-плагинов в `build-logic` (`kmpcleanarchsample.kmp.library`/`.kmp.compose`)
+— это чисто механика сборки, наружу не влияет.
+
 ## Структура модулей
 
 ```

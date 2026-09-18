@@ -27,6 +27,7 @@ tasks.register("newFeature") {
     // Значения проекта захватываются на этапе конфигурации — при configuration cache
     // обращаться к Task.project/rootDir в doLast нельзя.
     val featureNameProvider = providers.gradleProperty("featureName")
+    val rootPackageProvider = providers.gradleProperty("rootPackage")
     val rootDirectory = rootDir
 
     doLast {
@@ -42,7 +43,7 @@ tasks.register("newFeature") {
             error("feature/$featureName already exists")
         }
 
-        val packagePath = "ru/marwinka/kmpcleanarchsample/feature/$featureName"
+        val packagePath = "${rootPackageProvider.get().replace('.', '/')}/feature/$featureName"
         val gradlePath = ":feature:$featureName"
 
         fun sourceDir(layer: String, sourceSet: String) =

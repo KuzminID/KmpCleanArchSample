@@ -18,6 +18,9 @@ private val frameworkBaseName = project.path
     .split(":", "-")
     .joinToString("") { it.replaceFirstChar(Char::uppercase) }
 
+//Единственный источник правды для базового пакета — см. gradle.properties
+private val rootPackage = providers.gradleProperty("rootPackage").get()
+
 kotlin {
     listOf(
         iosArm64(),
@@ -30,7 +33,7 @@ kotlin {
     }
 
     android {
-        namespace = "ru.marwinka.kmpcleanarchsample.$moduleNamespace"
+        namespace = "$rootPackage.$moduleNamespace"
         compileSdk = libs.findVersion("android-compileSdk").get().requiredVersion.toInt()
         minSdk = libs.findVersion("android-minSdk").get().requiredVersion.toInt()
 
