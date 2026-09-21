@@ -8,7 +8,10 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    # project.pbxproj (objectVersion 77) требует Xcode 16+ для чтения — macos-14
+    # даёт по умолчанию Xcode 15.4 и падает с "future Xcode project file format".
+    # macos-26 (GA) идёт с Xcode 26.x по умолчанию.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
