@@ -12,7 +12,8 @@ Compose Multiplatform, организованного по принципам ч
 | Назначение          | Библиотека                              |
 |----------------------|------------------------------------------|
 | UI                   | Compose Multiplatform 1.11, Material 3   |
-| Навигация            | Voyager (Navigator, TabNavigator, ScreenModel) |
+| Навигация            | Navigation 3 (`NavDisplay`, back stack на вкладку) |
+| Состояние экранов     | `androidx.lifecycle.ViewModel` (KMP), привязан к записи back stack |
 | DI                    | Koin                                     |
 | Локальная БД          | Room (KMP-сборка `androidx.room3`) + SQLite (bundled) |
 | Сеть                  | Ktor Client (OkHttp на Android, Darwin на iOS) |
@@ -48,23 +49,22 @@ convention-плагинов в `build-logic` (`kmpcleanarchsample.kmp.library`/`
 ```
 androidApp/            Android-приложение (Activity, DI-старт)
 iosApp/                 iOS-приложение (SwiftUI-обёртка)
-shared/                 Composable App(), сборка Koin-модулей, iOS entry point
+shared/                 Composable App(), сборка Koin-модулей, Room AppDatabase, iOS entry point
 build-logic/            Gradle convention-плагины (общие настройки KMP-модулей)
 
-core/                   Общие утилиты: DispatcherProvider, AppError, resultOf
+core/                   Общие утилиты: DispatcherProvider, Clock, AppError, AppResult
 core/network/           Ktor HttpClient (платформенные engine — OkHttp/Darwin)
 core/database/          DatabasePathProvider (платформенный путь к файлу БД)
 
-data/tasks/             Data-слой задач: Room DAO/Entity/Database, TaskApi (мок)
-
 design-system/          Общие Compose-компоненты и тема (AppTheme, TaskCard)
 
-feature/tasks/           Фича "Задачи" — 4 отдельных Gradle-модуля:
+feature/tasks/           Фича "Задачи" — 4 отдельных Gradle-модуля и контракт для других фич:
+  ├── api/                CompletedTasksSource — единственное, что фичи видят друг у друга
   ├── domain/            модели, интерфейс репозитория, use case'ы — без Android/Compose/Room
-  ├── data/               реализация репозитория (Room/Ktor)
-  ├── presentation/       ScreenModel, Screen, Tab (Compose + Voyager)
+  ├── data/               репозиторий, Room Entity/DAO фичи (local/), TaskApi + мок (remote/)
+  ├── presentation/       ViewModel, Route/Content (+ @Preview), NavDisplay вкладки
   └── di/                 Koin-модуль, связывающий domain/data/presentation
-feature/history/         Фича "История" — та же структура из 4 модулей
+feature/history/         Фича "История" — та же структура из 4 модулей; данные получает через feature/tasks/api
 ```
 
 Каждый слой фичи — это отдельный Gradle-модуль, а не просто пакет. Границы
@@ -76,38 +76,45 @@ Clean Architecture проверяются компилятором: `presentatio
 
 ```
 androidApp ─▶ shared ─┬─▶ feature:tasks:presentation ─▶ feature:tasks:domain ─▶ core
-                       ├─▶ feature:tasks:di ─┬─▶ feature:tasks:data ─▶ data:tasks ─┬─▶ core:network
-                       │                      └─▶ feature:tasks:presentation        └─▶ core:database
+                       ├─▶ feature:tasks:di ─┬─▶ feature:tasks:data ─▶ feature:tasks:api
+                       │                      └─▶ feature:tasks:presentation
+                       ├─▶ feature:tasks:data   (Room-сущности для AppDatabase)
                        ├─▶ feature:history:presentation ─▶ feature:history:domain
-                       ├─▶ feature:history:di ─▶ feature:history:data ─▶ data:tasks
+                       ├─▶ feature:history:di ─▶ feature:history:data ─▶ feature:tasks:api
+                       ├─▶ core:network, core:database
                        └─▶ design-system
 ```
 
 `core`, `core:network`, `core:database` — платформенно-независимые "нижние" слои
-без зависимостей от фич. `data:tasks` объединяет сеть и БД в единый источник
-данных. `feature:*` — самостоятельные вертикали, не зависящие друг от друга
-напрямую. `shared` — точка сборки: собирает все Koin-модули (из `:di`-модулей
-фич) и рисует `App()` с табами (из `:presentation`-модулей фич).
+без зависимостей от фич. Каждая фича хранит свои Room-сущности и DAO в собственном
+`:data`, а общий `AppDatabase` объявлен в `shared`: только точка сборки может видеть
+сущности всех фич. `feature:*` — самостоятельные вертикали, видящие друг друга только
+через `:api`. `shared` собирает все Koin-модули (из `:di`-модулей фич и
+`appDatabaseModule`) и рисует `App()` с вкладками (из `:presentation`-модулей фич).
+
+Эти правила не только описаны, но и проверяются: корневой `build.gradle.kts` на этапе
+конфигурации проверяет зависимости между проектами и роняет сборку при нарушении.
 
 ## Архитектура внутри фичи (`feature/tasks`, `feature/history`)
 
 Каждая фича — 4 Gradle-модуля по слоям чистой архитектуры:
 
 - **`:domain`** — модели (`Task`), интерфейс репозитория (`TaskRepository`),
-  use case'ы (`GetActiveTasksUseCase`, `RefreshTasksUseCase`, `ToggleTaskDoneUseCase`).
+  use case'ы (`GetActiveTasksUseCase`, `RefreshTasksUseCase`, `CompleteTaskUseCase`).
   Зависит только от `core` — компилятор физически не пустит сюда Room/Ktor/Compose.
 - **`:data`** — `TaskRepositoryImpl` (публичный класс — на него по имени ссылается `:di`,
   а `internal` не пересекает границы Gradle-модулей), который мапит `TaskEntity` (Room)
   в domain-модель `Task` и дёргает `TaskApi` для наполнения БД.
-- **`:presentation`** — `ScreenModel` (Voyager) со `StateFlow<UiState>` и Composable-экран,
-  который его отображает. Зависит только от `:domain` — не видит `:data` и, соответственно,
-  Room/Ktor вообще.
+- **`:presentation`** — `ViewModel` со `StateFlow<UiState>` (собирается через `stateIn`),
+  stateful `TasksRoute` (берёт ViewModel из Koin) и stateless `TasksContent` с `@Preview`,
+  ключи навигации и `NavDisplay` вкладки. Каждая запись back stack получает свой
+  `ViewModelStore`. Зависит только от `:domain` — не видит `:data` и Room/Ktor вообще.
 - **`:di`** — Koin-модуль фичи, единственное место, где интерфейс репозитория из
   `:domain` связывается с реализацией из `:data`.
 
-`feature:history` использует ту же таблицу (`TaskDao`) из `data:tasks`, но маппит
-строки в свою собственную модель `TaskHistoryEntry` — фичи не делятся domain-моделями
-между собой, только источником данных.
+`feature:history` получает выполненные задачи через контракт `feature:tasks:api`
+(`CompletedTasksSource`) и маппит их в свою модель `TaskHistoryEntry` — фичи не видят
+таблицы и domain-модели друг друга.
 
 ## Добавление новой фичи
 
@@ -139,8 +146,8 @@ androidApp ─▶ shared ─┬─▶ feature:tasks:presentation ─▶ feature:
 у чисто общих модулей нет):
 
 - `core`: `DispatcherProviderTest`
-- `feature/tasks`: `TaskUseCasesTest`
-- `feature/history`: `GetTaskHistoryUseCaseTest`
+- `feature/tasks`: `TaskUseCasesTest`, `TasksViewModelTest`, `TasksFeatureModuleTest` (граф Koin)
+- `feature/history`: `GetTaskHistoryUseCaseTest`, `TaskHistoryRepositoryImplTest`
 
 ```bash
 ./gradlew allTests

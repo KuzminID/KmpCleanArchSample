@@ -9,6 +9,7 @@ kotlin {
             implementation(project(":feature:history:data"))
             implementation(project(":feature:history:presentation"))
             implementation(libs.koin.core)
+            implementation(libs.koin.core.viewmodel)
         }
     }
 }

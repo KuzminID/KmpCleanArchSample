@@ -5,7 +5,7 @@ import org.koin.core.context.startKoin
 import ru.marwinka.kmpcleanarchsample.core.coreModule
 import ru.marwinka.kmpcleanarchsample.core.database.databaseModule
 import ru.marwinka.kmpcleanarchsample.core.network.networkModule
-import ru.marwinka.kmpcleanarchsample.data.tasks.tasksDataModule
+import ru.marwinka.kmpcleanarchsample.database.appDatabaseModule
 import ru.marwinka.kmpcleanarchsample.feature.history.di.historyFeatureModule
 import ru.marwinka.kmpcleanarchsample.feature.tasks.di.tasksFeatureModule
 
@@ -16,7 +16,7 @@ fun initKoin(appDeclaration: KoinApplication.() -> Unit = {}) {
             coreModule,
             networkModule,
             databaseModule,
-            tasksDataModule,
+            appDatabaseModule,
             tasksFeatureModule,
             historyFeatureModule,
         )

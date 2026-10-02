@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
+import ru.marwinka.kmpcleanarchsample.core.AppResult
 import ru.marwinka.kmpcleanarchsample.feature.tasks.domain.model.Task
 import ru.marwinka.kmpcleanarchsample.feature.tasks.domain.repository.TaskRepository
 import kotlin.test.Test
@@ -25,10 +26,11 @@ private class FakeTaskRepository(
 
     override fun observeActive(): Flow<List<Task>> = flowOf(tasks)
 
-    override suspend fun refresh() = Unit
+    override suspend fun refresh(): AppResult<Unit> = AppResult.Success(Unit)
 
-    override suspend fun complete(id: String) {
+    override suspend fun complete(id: String): AppResult<Unit> {
         completedId = id
+        return AppResult.Success(Unit)
     }
 }
 
@@ -44,12 +46,12 @@ class TaskUseCasesTest {
         }
 
     @Test
-    fun toggleTaskDone_delegates_to_repository() =
+    fun completeTask_delegates_to_repository() =
         runBlocking {
             val repository = FakeTaskRepository(tasks)
             assertNull(repository.completedId)
 
-            ToggleTaskDoneUseCase(repository)("1")
+            CompleteTaskUseCase(repository)("1")
 
             assertEquals("1", repository.completedId)
         }

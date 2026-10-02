@@ -7,7 +7,36 @@ on:
     tags: ["v*"]
 
 jobs:
-  build:
+  # Всё, что не требует Xcode, идёт на Linux: минута macOS-раннера заметно дороже.
+  # Здесь же срабатывает проверка границ модулей — она выполняется при конфигурации любой сборки.
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Ktlint
+        run: ./gradlew ktlintCheck
+
+      - name: Android debug APK
+        run: ./gradlew :androidApp:assembleDebug
+
+      # Артефакты только на push в main/теги — CD-часть шаблона без внешних сервисов
+      - name: Upload Android debug APK
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: androidApp/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+  ios:
     # project.pbxproj (objectVersion 77) требует Xcode 16+ для чтения — macos-14
     # даёт по умолчанию Xcode 15.4 и падает с "future Xcode project file format".
     # macos-26 (GA) идёт с Xcode 26.x по умолчанию.
@@ -22,14 +51,15 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Ktlint
-        run: ./gradlew ktlintCheck
+      # Kotlin/Native тянет toolchain (~1 ГБ) при первом запуске — кэшируем между прогонами.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
 
+      # У чисто общих модулей нет JVM-таргета, поэтому юнит-тесты гоняются на iosSimulatorArm64.
       - name: Unit tests (iosSimulatorArm64Test)
         run: ./gradlew allTests
-
-      - name: Android debug APK
-        run: ./gradlew :androidApp:assembleDebug
 
       - name: iOS build (simulator, no signing)
         run: |
@@ -39,15 +69,6 @@ jobs:
             -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO
-
-      # Артефакты только на push в main/теги — CD-часть шаблона без внешних сервисов
-      - name: Upload Android debug APK
-        if: github.event_name == 'push'
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-debug-apk
-          path: androidApp/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
 
       - name: Upload iOS simulator build
         if: github.event_name == 'push'

@@ -1,5 +1,7 @@
 plugins {
     id("kmpcleanarchsample.kmp.compose")
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.androidxRoom3)
 }
 
 kotlin {
@@ -19,6 +21,7 @@ kotlin {
 
     sourceSets {
         androidMain.dependencies {
+            implementation(libs.koin.android)
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.compose.uiTooling)
         }
@@ -26,7 +29,10 @@ kotlin {
             implementation(project(":core"))
             implementation(project(":core:network"))
             implementation(project(":core:database"))
-            implementation(project(":data:tasks"))
+            implementation(project(":feature:tasks:data"))
+            implementation(libs.androidx.room3.runtime)
+            implementation(libs.androidx.sqlite.bundled)
+            implementation(libs.kotlinx.coroutines.core)
             implementation(project(":feature:tasks:presentation"))
             implementation(project(":feature:tasks:di"))
             implementation(project(":feature:history:presentation"))
@@ -39,13 +45,24 @@ kotlin {
             implementation(libs.compose.ui)
             implementation(libs.compose.components.resources)
             implementation(libs.compose.uiToolingPreview)
-            implementation(libs.voyager.navigator)
-            implementation(libs.voyager.tabNavigator)
-            implementation(libs.voyager.transitions)
         }
     }
 }
 
 dependencies {
     androidRuntimeClasspath(libs.compose.uiTooling)
+}
+
+compose.resources {
+    packageOfResClass = "ru.marwinka.kmpcleanarchsample.resources"
+}
+
+room3 {
+    schemaDirectory("$projectDir/schemas")
+}
+
+dependencies {
+    add("kspAndroid", libs.androidx.room3.compiler)
+    add("kspIosSimulatorArm64", libs.androidx.room3.compiler)
+    add("kspIosArm64", libs.androidx.room3.compiler)
 }

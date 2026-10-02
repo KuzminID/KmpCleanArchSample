@@ -23,10 +23,22 @@ fun Throwable.toAppError(): AppError =
         else -> AppError.Unknown(this)
     }
 
-suspend fun <T> resultOf(block: suspend () -> T): Result<T> =
+sealed interface AppResult<out T> {
+    data class Success<out T>(
+        val value: T,
+    ) : AppResult<T>
+
+    data class Failure(
+        val error: AppError,
+    ) : AppResult<Nothing>
+}
+
+/** Выполняет [block] и превращает исключение в [AppResult.Failure]; отмену корутины пробрасывает дальше. */
+suspend fun <T> appResultOf(block: suspend () -> T): AppResult<T> =
     try {
-        Result.success(block())
+        AppResult.Success(block())
+    } catch (t: kotlinx.coroutines.CancellationException) {
+        throw t
     } catch (t: Throwable) {
-        if (t is kotlinx.coroutines.CancellationException) throw t
-        Result.failure(t.toAppError())
+        AppResult.Failure(t.toAppError())
     }
