@@ -2,11 +2,13 @@ package ru.marwinka.kmpcleanarchsample.feature.tasks.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.marwinka.kmpcleanarchsample.core.AppError
 import ru.marwinka.kmpcleanarchsample.core.AppResult
@@ -26,8 +28,10 @@ sealed interface TasksUiError {
 
 data class TasksUiState(
     val tasks: List<Task> = emptyList(),
-    /** Данных ещё не было: в базе пусто и первый refresh не завершился. */
+    /** Данных ещё не было: в базе пусто и первое обновление не завершилось. */
     val isInitialLoading: Boolean = true,
+    /** Идёт обновление поверх уже показанных данных. */
+    val isRefreshing: Boolean = false,
     val error: TasksUiError? = null,
 )
 
@@ -37,17 +41,21 @@ class TasksViewModel(
     private val completeTask: CompleteTaskUseCase,
 ) : ViewModel() {
     private data class RefreshState(
-        val isFinished: Boolean = false,
+        val isRunning: Boolean = false,
+        val hasFinished: Boolean = false,
         val error: TasksUiError? = null,
     )
 
     private val refreshState = MutableStateFlow(RefreshState())
+    private var refreshJob: Job? = null
 
-    val state: StateFlow<TasksUiState> =
+    val uiState: StateFlow<TasksUiState> =
         combine(getActiveTasks(), refreshState) { tasks, refresh ->
+            val isInitialLoading = tasks.isEmpty() && !refresh.hasFinished
             TasksUiState(
                 tasks = tasks,
-                isInitialLoading = tasks.isEmpty() && !refresh.isFinished,
+                isInitialLoading = isInitialLoading,
+                isRefreshing = refresh.isRunning && !isInitialLoading,
                 error = refresh.error,
             )
         }.stateIn(
@@ -57,19 +65,25 @@ class TasksViewModel(
         )
 
     init {
-        refresh()
+        onRefresh()
     }
 
-    fun refresh() {
-        viewModelScope.launch {
-            refreshState.value = RefreshState()
-            val error = (refreshTasks() as? AppResult.Failure)?.error?.toUiError()
-            refreshState.value = RefreshState(isFinished = true, error = error)
-        }
+    /** Повторный вызов во время идущего обновления игнорируется: два запроса не гоняются друг с другом. */
+    fun onRefresh() {
+        if (refreshJob?.isActive == true) return
+        refreshJob =
+            viewModelScope.launch {
+                refreshState.update { it.copy(isRunning = true, error = null) }
+                val error = (refreshTasks() as? AppResult.Failure)?.error?.toUiError()
+                refreshState.value = RefreshState(hasFinished = true, error = error)
+            }
     }
 
     fun onTaskDone(id: String) {
-        viewModelScope.launch { completeTask(id) }
+        viewModelScope.launch {
+            val failure = completeTask(id) as? AppResult.Failure ?: return@launch
+            refreshState.update { it.copy(error = failure.error.toUiError()) }
+        }
     }
 
     private fun AppError.toUiError(): TasksUiError =

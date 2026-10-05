@@ -6,24 +6,16 @@ import kotlinx.coroutines.flow.map
 import ru.marwinka.kmpcleanarchsample.core.DispatcherProvider
 import ru.marwinka.kmpcleanarchsample.feature.tasks.api.CompletedTask
 import ru.marwinka.kmpcleanarchsample.feature.tasks.api.CompletedTasksSource
+import ru.marwinka.kmpcleanarchsample.feature.tasks.data.local.CompletedTaskRow
 import ru.marwinka.kmpcleanarchsample.feature.tasks.data.local.TaskDao
-import ru.marwinka.kmpcleanarchsample.feature.tasks.data.local.TaskEntity
 
-class CompletedTasksSourceImpl(
+internal class CompletedTasksSourceImpl(
     private val dao: TaskDao,
     private val dispatchers: DispatcherProvider,
 ) : CompletedTasksSource {
     override fun observeCompleted(): Flow<List<CompletedTask>> =
         dao
-            .observeDone()
-            .map { rows -> rows.map { it.toCompleted() } }
+            .observeCompleted()
+            .map { rows -> rows.map(CompletedTaskRow::toCompletedTask) }
             .flowOn(dispatchers.default)
-
-    private fun TaskEntity.toCompleted() =
-        CompletedTask(
-            id = id,
-            title = title,
-            createdAtEpochMillis = createdAt,
-            completedAtEpochMillis = completedAt ?: createdAt,
-        )
 }

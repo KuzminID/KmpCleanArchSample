@@ -4,23 +4,44 @@ import androidx.room3.Dao
 import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
+import androidx.room3.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface TaskDao {
-    @Query("SELECT * FROM taskEntity WHERE status = '${TaskStatus.ACTIVE}' ORDER BY createdAt DESC")
+internal interface TaskDao {
+    @Query(
+        """
+        SELECT task.* FROM task
+        LEFT JOIN task_completion ON task_completion.taskId = task.id
+        WHERE task_completion.taskId IS NULL
+        ORDER BY task.position
+        """,
+    )
     fun observeActive(): Flow<List<TaskEntity>>
 
-    @Query("SELECT * FROM taskEntity WHERE status = '${TaskStatus.DONE}' ORDER BY completedAt DESC")
-    fun observeDone(): Flow<List<TaskEntity>>
-
-    /** Добавляет только новые задачи: уже существующие (в том числе выполненные) не перезаписываются. */
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertNew(tasks: List<TaskEntity>)
-
-    @Query("UPDATE taskEntity SET status = '${TaskStatus.DONE}', completedAt = :completedAt WHERE id = :id")
-    suspend fun markDone(
-        id: String,
-        completedAt: Long,
+    @Query(
+        """
+        SELECT task.id AS id, task.title AS title, task_completion.completedAt AS completedAt FROM task
+        INNER JOIN task_completion ON task_completion.taskId = task.id
+        ORDER BY task_completion.completedAt DESC
+        """,
     )
+    fun observeCompleted(): Flow<List<CompletedTaskRow>>
+
+    /** Заменяет кэш одной транзакцией: задачи, удалённые на сервере, не остаются в базе. */
+    @Transaction
+    suspend fun replaceAll(tasks: List<TaskEntity>) {
+        deleteAll()
+        insertAll(tasks)
+    }
+
+    @Query("DELETE FROM task")
+    suspend fun deleteAll()
+
+    @Insert
+    suspend fun insertAll(tasks: List<TaskEntity>)
+
+    /** Повторная отметка не меняет время первой: операция идемпотентна и выполняется одним запросом. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertCompletion(completion: TaskCompletionEntity)
 }

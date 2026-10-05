@@ -13,6 +13,5 @@ interface CompletedTasksSource {
 data class CompletedTask(
     val id: String,
     val title: String,
-    val createdAtEpochMillis: Long,
     val completedAtEpochMillis: Long,
 )

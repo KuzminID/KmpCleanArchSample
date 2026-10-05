@@ -1,52 +1,45 @@
 package ru.marwinka.kmpcleanarchsample.feature.tasks.di
 
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import org.koin.dsl.module
 import ru.marwinka.kmpcleanarchsample.core.coreModule
+import ru.marwinka.kmpcleanarchsample.core.database.databaseModule
+import ru.marwinka.kmpcleanarchsample.core.network.networkModule
 import ru.marwinka.kmpcleanarchsample.feature.tasks.api.CompletedTasksSource
-import ru.marwinka.kmpcleanarchsample.feature.tasks.data.local.TaskDao
-import ru.marwinka.kmpcleanarchsample.feature.tasks.data.local.TaskEntity
 import ru.marwinka.kmpcleanarchsample.feature.tasks.domain.repository.TaskRepository
 import ru.marwinka.kmpcleanarchsample.feature.tasks.presentation.TasksViewModel
 import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 
-private class NoOpTaskDao : TaskDao {
-    override fun observeActive(): Flow<List<TaskEntity>> = emptyFlow()
-
-    override fun observeDone(): Flow<List<TaskEntity>> = emptyFlow()
-
-    override suspend fun insertNew(tasks: List<TaskEntity>) = Unit
-
-    override suspend fun markDone(
-        id: String,
-        completedAt: Long,
-    ) = Unit
-}
-
 /**
- * Resolves the feature's public entry points with only infrastructure faked, so a constructor change
- * that the module does not satisfy fails here instead of at app start.
+ * Разрешает публичные точки входа фичи вместе с инфраструктурными модулями, поэтому
+ * изменение конструктора, которое граф не удовлетворяет, падает здесь, а не при запуске.
+ * База и HTTP-клиент только создаются: файл не открывается, запросы не уходят,
+ * а обновление в init ViewModel не стартует, пока тестовый Main не продвинут.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class TasksFeatureModuleTest {
+    @BeforeTest
+    fun setUp() = Dispatchers.setMain(StandardTestDispatcher())
+
     @AfterTest
-    fun tearDown() = stopKoin()
+    fun tearDown() {
+        stopKoin()
+        Dispatchers.resetMain()
+    }
 
     @Test
     fun module_graph_is_complete() {
         val koin =
             startKoin {
-                modules(
-                    coreModule,
-                    module {
-                        single<TaskDao> { NoOpTaskDao() }
-                    },
-                    tasksFeatureModule,
-                )
+                modules(coreModule, networkModule, databaseModule, tasksFeatureModule)
             }.koin
 
         assertNotNull(koin.get<TaskRepository>())
