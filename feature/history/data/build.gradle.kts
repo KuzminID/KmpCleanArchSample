@@ -7,13 +7,12 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":core"))
             implementation(project(":feature:history:domain"))
-            // api, так как CompletedTasksSource входит в публичный конструктор TaskHistoryRepositoryImpl
-            api(project(":feature:tasks:api"))
+            implementation(project(":feature:tasks:api"))
+            implementation(libs.koin.core)
             implementation(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {
-            implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.kotlinx.coroutines.test)
+            implementation(project(":core:testing"))
         }
     }
 }

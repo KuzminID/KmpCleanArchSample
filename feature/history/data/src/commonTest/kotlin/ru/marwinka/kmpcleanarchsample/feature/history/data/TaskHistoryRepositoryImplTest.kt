@@ -3,7 +3,9 @@ package ru.marwinka.kmpcleanarchsample.feature.history.data
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
+import ru.marwinka.kmpcleanarchsample.core.testing.TestDispatcherProvider
 import ru.marwinka.kmpcleanarchsample.feature.history.domain.model.TaskHistoryEntry
 import ru.marwinka.kmpcleanarchsample.feature.tasks.api.CompletedTask
 import ru.marwinka.kmpcleanarchsample.feature.tasks.api.CompletedTasksSource
@@ -18,12 +20,19 @@ private class FakeCompletedTasksSource(
 
 class TaskHistoryRepositoryImplTest {
     @Test
-    fun maps_completed_tasks_and_computes_duration() =
+    fun maps_completed_tasks_to_history_entries() =
         runTest {
-            val source = FakeCompletedTasksSource(listOf(CompletedTask("1", "Write a test", 1_000, 4_500)))
+            val source = FakeCompletedTasksSource(listOf(CompletedTask("1", "S01E01 · Pilot", 4_500)))
+            val repository = TaskHistoryRepositoryImpl(source, TestDispatcherProvider(StandardTestDispatcher(testScheduler)))
 
-            val history = TaskHistoryRepositoryImpl(source).observeHistory().first()
-
-            assertEquals(listOf(TaskHistoryEntry("1", "Write a test", 4_500, 3_500)), history)
+            assertEquals(listOf(TaskHistoryEntry("1", "S01E01 · Pilot", 4_500)), repository.observeHistory().first())
         }
+
+    @Test
+    fun mapper_keeps_id_title_and_completion_time() {
+        assertEquals(
+            TaskHistoryEntry("2", "S01E02 · Lawnmower Dog", 7),
+            CompletedTask("2", "S01E02 · Lawnmower Dog", 7).toHistoryEntry(),
+        )
+    }
 }

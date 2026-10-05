@@ -20,46 +20,42 @@ import org.koin.compose.viewmodel.koinViewModel
 import ru.marwinka.kmpcleanarchsample.designsystem.TaskCard
 import ru.marwinka.kmpcleanarchsample.feature.history.domain.model.TaskHistoryEntry
 import ru.marwinka.kmpcleanarchsample.feature.history.presentation.resources.Res
-import ru.marwinka.kmpcleanarchsample.feature.history.presentation.resources.history_duration_minutes
 import ru.marwinka.kmpcleanarchsample.feature.history.presentation.resources.history_empty
 
-/** Stateful entry point of the history screen. */
+/** Точка входа экрана истории со состоянием. */
 @Composable
 fun HistoryRoute(
     modifier: Modifier = Modifier,
     viewModel: HistoryViewModel = koinViewModel(),
 ) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    HistoryContent(state = state, modifier = modifier)
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    HistoryScreen(uiState = uiState, modifier = modifier)
 }
 
+/** Экран истории без состояния. */
 @Composable
-internal fun HistoryContent(
-    state: HistoryUiState,
+internal fun HistoryScreen(
+    uiState: HistoryUiState,
     modifier: Modifier = Modifier,
 ) {
-    when (state) {
-        is HistoryUiState.Loading ->
+    when {
+        uiState.isLoading ->
             Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
 
-        is HistoryUiState.Content ->
-            if (state.entries.isEmpty()) {
-                Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(Res.string.history_empty))
-                }
-            } else {
-                LazyColumn(
-                    modifier = modifier.fillMaxSize().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    items(state.entries, key = { it.id }) { entry ->
-                        TaskCard(
-                            title = entry.title,
-                            trailingText = stringResource(Res.string.history_duration_minutes, entry.durationMillis / 60_000),
-                        )
-                    }
+        uiState.entries.isEmpty() ->
+            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(stringResource(Res.string.history_empty))
+            }
+
+        else ->
+            LazyColumn(
+                modifier = modifier.fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(uiState.entries, key = { it.id }) { entry ->
+                    TaskCard(title = entry.title)
                 }
             }
     }
@@ -67,18 +63,18 @@ internal fun HistoryContent(
 
 @Preview
 @Composable
-private fun HistoryContentPreview() {
-    HistoryContent(
-        state =
-            HistoryUiState.Content(
-                listOf(
-                    TaskHistoryEntry(
-                        id = "1",
-                        title = "Write the architecture doc",
-                        completedAtEpochMillis = 0,
-                        durationMillis = 1_800_000,
-                    ),
-                ),
-            ),
+private fun HistoryScreenLoadingPreview() = HistoryScreen(HistoryUiState())
+
+@Preview
+@Composable
+private fun HistoryScreenEmptyPreview() = HistoryScreen(HistoryUiState(isLoading = false))
+
+@Preview
+@Composable
+private fun HistoryScreenContentPreview() =
+    HistoryScreen(
+        HistoryUiState(
+            entries = listOf(TaskHistoryEntry(id = "1", title = "S01E01 · Pilot", completedAtEpochMillis = 0)),
+            isLoading = false,
+        ),
     )
-}
