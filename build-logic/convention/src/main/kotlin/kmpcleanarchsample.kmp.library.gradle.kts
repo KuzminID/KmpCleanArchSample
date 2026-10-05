@@ -22,6 +22,9 @@ private val frameworkBaseName = project.path
 private val rootPackage = providers.gradleProperty("rootPackage").get()
 
 kotlin {
+    // JVM-таргет нужен, чтобы общие тесты шли на Linux-раннере CI, а не только на macOS (TST-8).
+    jvm()
+
     listOf(
         iosArm64(),
         iosSimulatorArm64(),
@@ -40,6 +43,11 @@ kotlin {
         compilerOptions {
             jvmTarget = JvmTarget.JVM_17
         }
+    }
+
+    compilerOptions {
+        // expect/actual-классы (DatabasePathProvider, конструктор Room-базы) без предупреждения о Beta-статусе.
+        freeCompilerArgs.add("-Xexpect-actual-classes")
     }
 
     sourceSets {

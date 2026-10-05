@@ -24,6 +24,13 @@ jobs:
       - name: Ktlint
         run: ./gradlew ktlintCheck
 
+      - name: Detekt
+        run: ./gradlew detektAll
+
+      # Общие тесты на JVM-таргете: тот же commonTest, что и на iOS, плюс тесты Room в jvmTest.
+      - name: Unit tests (JVM)
+        run: ./gradlew jvmTest
+
       - name: Android debug APK
         run: ./gradlew :androidApp:assembleDebug
 
@@ -57,9 +64,9 @@ jobs:
           path: ~/.konan
           key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
 
-      # У чисто общих модулей нет JVM-таргета, поэтому юнит-тесты гоняются на iosSimulatorArm64.
-      - name: Unit tests (iosSimulatorArm64Test)
-        run: ./gradlew allTests
+      # На macOS — только то, что требует Xcode: общие тесты на iOS-симуляторе и сборка приложения.
+      - name: Unit tests (iOS simulator)
+        run: ./gradlew iosSimulatorArm64Test
 
       - name: iOS build (simulator, no signing)
         run: |

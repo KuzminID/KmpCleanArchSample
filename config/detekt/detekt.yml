@@ -1,0 +1,17 @@
+# Поверх стандартной конфигурации detekt (buildUponDefaultConfig).
+# Правила, конфликтующие с конвенциями Compose, отключены или ослаблены.
+naming:
+  FunctionNaming:
+    # Composable-функции пишутся с большой буквы.
+    ignoreAnnotated: ['Composable']
+  MatchingDeclarationName:
+    # Файлы XxxNavigation.kt объединяют ключи маршрутов и функцию вкладки.
+    active: false
+style:
+  # Длина строки проверяется ktlint.
+  MaxLineLength:
+    active: false
+complexity:
+  LongParameterList:
+    # Композаблы экранов принимают состояние и колбэки отдельными параметрами.
+    ignoreAnnotated: ['Composable']
