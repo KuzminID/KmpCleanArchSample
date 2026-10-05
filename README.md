@@ -4,8 +4,10 @@
 Compose Multiplatform, организованного по принципам чистой архитектуры с разбивкой
 на Gradle-модули по слоям и фичам.
 
-Демо-функциональность: простой трекер задач — список активных задач и история
-выполненных.
+Демо-функциональность: трекер задач поверх [Rick and Morty API](https://rickandmortyapi.com/) —
+список эпизодов к просмотру и история просмотренных.
+
+Целевая архитектура обоих шаблонов (Android и KMP), выбор технологий по ситуациям, отклонения реализации от неё и подводные камни описаны в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Стек технологий
 
@@ -15,10 +17,12 @@ Compose Multiplatform, организованного по принципам ч
 | Навигация            | Navigation 3 (`NavDisplay`, back stack на вкладку) |
 | Состояние экранов     | `androidx.lifecycle.ViewModel` (KMP), привязан к записи back stack |
 | DI                    | Koin                                     |
-| Локальная БД          | Room (KMP-сборка `androidx.room3`) + SQLite (bundled) |
-| Сеть                  | Ktor Client (OkHttp на Android, Darwin на iOS) |
+| Локальная БД          | Room 3 (`androidx.room3`) + SQLite (bundled), своя база у каждой фичи |
+| Сеть                  | Ktor Client (OkHttp на Android и JVM, Darwin на iOS) |
 | Сериализация          | kotlinx.serialization                    |
 | Асинхронность         | kotlinx.coroutines                       |
+| Тесты                 | `kotlin.test`, `kotlinx-coroutines-test`, рукописные fake, Ktor `MockEngine` |
+| Стиль и анализ        | ktlint, detekt                           |
 | Kotlin                | 2.4.10                                   |
 
 Версии всех зависимостей зафиксированы в [gradle/libs.versions.toml](gradle/libs.versions.toml).
@@ -49,26 +53,28 @@ convention-плагинов в `build-logic` (`kmpcleanarchsample.kmp.library`/`
 ```
 androidApp/            Android-приложение (Activity, DI-старт)
 iosApp/                 iOS-приложение (SwiftUI-обёртка)
-shared/                 Composable App(), сборка Koin-модулей, Room AppDatabase, iOS entry point
-build-logic/            Gradle convention-плагины (общие настройки KMP-модулей)
+shared/                 Composable App() с вкладками, сборка Koin-модулей, iOS entry point
+build-logic/            Gradle convention-плагины (общие настройки KMP-модулей, JVM/Android/iOS-таргеты)
 
-core/                   Общие утилиты: DispatcherProvider, Clock, AppError, AppResult
-core/network/           Ktor HttpClient (платформенные engine — OkHttp/Darwin)
-core/database/          DatabasePathProvider (платформенный путь к файлу БД)
+core/                   Общее: DispatcherProvider, Clock, Logger, AppError, AppResult, appResultOf
+core/network/           Ktor HttpClient, networkResultOf — перевод сетевых ошибок в AppError
+core/database/          DatabasePathProvider и общие настройки Room-builder'а
+core/testing/           Тестовые утилиты: TestDispatcherProvider, FixedClock, RecordingLogger
 
-design-system/          Общие Compose-компоненты и тема (AppTheme, TaskCard)
+design-system/          Тема и общие Compose-компоненты (AppTheme, TaskCard, AppTopBar, RefreshableContent)
 
-feature/tasks/           Фича "Задачи" — 4 отдельных Gradle-модуля и контракт для других фич:
+feature/tasks/           Фича "Задачи":
   ├── api/                CompletedTasksSource — единственное, что фичи видят друг у друга
   ├── domain/            модели, интерфейс репозитория, use case'ы — без Android/Compose/Room
-  ├── data/               репозиторий, Room Entity/DAO фичи (local/), TaskApi + мок (remote/)
-  ├── presentation/       ViewModel, Route/Content (+ @Preview), NavDisplay вкладки
-  └── di/                 Koin-модуль, связывающий domain/data/presentation
-feature/history/         Фича "История" — та же структура из 4 модулей; данные получает через feature/tasks/api
+  ├── data/               internal-репозиторий, своя Room-база (local/), Ktor-клиент API (remote/), мапперы
+  ├── presentation/       ViewModel, Route/Screen (+ превью состояний), NavDisplay вкладки
+  ├── di/                 Koin-модуль фичи и тест графа
+  └── testing/            FakeTaskRepository для тестов domain и presentation
+feature/history/         Фича "История" — api/testing не нужны; данные получает через feature/tasks/api
 ```
 
 Каждый слой фичи — это отдельный Gradle-модуль, а не просто пакет. Границы
-Clean Architecture проверяются компилятором: `presentation` физически не может
+Clean Architecture проверяются сборкой: `presentation` физически не может
 импортировать Room (нет такой зависимости в classpath), а `domain` не видит
 ни Android, ни Compose, ни Room/Ktor.
 
@@ -76,9 +82,9 @@ Clean Architecture проверяются компилятором: `presentatio
 
 ```
 androidApp ─▶ shared ─┬─▶ feature:tasks:presentation ─▶ feature:tasks:domain ─▶ core
-                       ├─▶ feature:tasks:di ─┬─▶ feature:tasks:data ─▶ feature:tasks:api
+                       ├─▶ feature:tasks:di ─┬─▶ feature:tasks:data ─┬─▶ feature:tasks:domain, feature:tasks:api
+                       │                      │                       └─▶ core:network, core:database
                        │                      └─▶ feature:tasks:presentation
-                       ├─▶ feature:tasks:data   (Room-сущности для AppDatabase)
                        ├─▶ feature:history:presentation ─▶ feature:history:domain
                        ├─▶ feature:history:di ─▶ feature:history:data ─▶ feature:tasks:api
                        ├─▶ core:network, core:database
@@ -86,14 +92,15 @@ androidApp ─▶ shared ─┬─▶ feature:tasks:presentation ─▶ feature:
 ```
 
 `core`, `core:network`, `core:database` — платформенно-независимые "нижние" слои
-без зависимостей от фич. Каждая фича хранит свои Room-сущности и DAO в собственном
-`:data`, а общий `AppDatabase` объявлен в `shared`: только точка сборки может видеть
-сущности всех фич. `feature:*` — самостоятельные вертикали, видящие друг друга только
-через `:api`. `shared` собирает все Koin-модули (из `:di`-модулей фич и
-`appDatabaseModule`) и рисует `App()` с вкладками (из `:presentation`-модулей фич).
+без зависимостей от фич. У каждой фичи своя Room-база в её `:data`: Entity, DAO и
+реализации объявлены `internal`, а наружу `:data` отдаёт только Koin-модуль.
+`feature:*` — самостоятельные вертикали, видящие друг друга только через `:api`.
+`shared` собирает все Koin-модули (из `:di`-модулей фич) и рисует `App()` с вкладками
+(из `:presentation`-модулей фич).
 
 Эти правила не только описаны, но и проверяются: корневой `build.gradle.kts` на этапе
-конфигурации проверяет зависимости между проектами и роняет сборку при нарушении.
+конфигурации проверяет зависимости между проектами и внешние библиотеки слоёв
+(например, Room, Ktor или Koin в `domain`) и роняет сборку при нарушении.
 
 ## Архитектура внутри фичи (`feature/tasks`, `feature/history`)
 
@@ -101,20 +108,26 @@ androidApp ─▶ shared ─┬─▶ feature:tasks:presentation ─▶ feature:
 
 - **`:domain`** — модели (`Task`), интерфейс репозитория (`TaskRepository`),
   use case'ы (`GetActiveTasksUseCase`, `RefreshTasksUseCase`, `CompleteTaskUseCase`).
-  Зависит только от `core` — компилятор физически не пустит сюда Room/Ktor/Compose.
-- **`:data`** — `TaskRepositoryImpl` (публичный класс — на него по имени ссылается `:di`,
-  а `internal` не пересекает границы Gradle-модулей), который мапит `TaskEntity` (Room)
-  в domain-модель `Task` и дёргает `TaskApi` для наполнения БД.
-- **`:presentation`** — `ViewModel` со `StateFlow<UiState>` (собирается через `stateIn`),
-  stateful `TasksRoute` (берёт ViewModel из Koin) и stateless `TasksContent` с `@Preview`,
-  ключи навигации и `NavDisplay` вкладки. Каждая запись back stack получает свой
-  `ViewModelStore`. Зависит только от `:domain` — не видит `:data` и Room/Ktor вообще.
-- **`:di`** — Koin-модуль фичи, единственное место, где интерфейс репозитория из
-  `:domain` связывается с реализацией из `:data`.
+  Зависит только от `core` — сборка не пустит сюда Room/Ktor/Compose/Koin.
+- **`:data`** — `internal` `TaskRepositoryImpl`, своя база `TasksDatabase`, `KtorTaskApi`
+  и мапперы DTO → Entity → domain в отдельном файле. Наружу видна только декларация
+  `tasksDataModule` (Koin), которую подключает `:di`.
+- **`:presentation`** — `ViewModel` с `uiState: StateFlow<UiState>` (собирается через
+  `combine` + `stateIn`) и методами `onXxx`, stateful `TasksRoute` (берёт ViewModel из Koin)
+  и stateless `TasksScreen(uiState, onXxx, modifier)` с превью каждого состояния,
+  `@Serializable`-ключи навигации и `NavDisplay` вкладки. Каждая запись back stack получает
+  свой `ViewModelStore`; сам back stack переживает поворот экрана и гибель процесса.
+  Зависит только от `:domain` — не видит `:data` и Room/Ktor вообще.
+- **`:di`** — Koin-модуль фичи: подключает `tasksDataModule`, регистрирует use case'ы и
+  ViewModel. Тест графа разрешает публичные точки входа до запуска приложения.
 
 `feature:history` получает выполненные задачи через контракт `feature:tasks:api`
 (`CompletedTasksSource`) и маппит их в свою модель `TaskHistoryEntry` — фичи не видят
 таблицы и domain-модели друг друга.
+
+Экспериментальные API Material 3 (`TopAppBar`, `PullToRefreshBox`) используются только
+внутри `design-system` (`AppTopBar`, `RefreshableContent`), поэтому изменение их API
+затронет один модуль, а не каждую фичу.
 
 ## Добавление новой фичи
 
@@ -134,33 +147,65 @@ androidApp ─▶ shared ─┬─▶ feature:tasks:presentation ─▶ feature:
 
 ## Данные
 
-`TaskApi` — заглушка (`FakeTaskApi`): при первом запуске отдаёт 4 фиксированные
-задачи с искусственной задержкой 400 мс. `TaskRepositoryImpl.refresh()` подгружает
-их в Room только если таблица пуста, дальше приложение работает целиком с локальной БД.
-Реального REST-эндпоинта нет, хотя слой `core:network` с настроенным Ktor-клиентом
-уже подготовлен для подключения.
+Параметры проекта по [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): профиль KMP, общий
+Compose Multiplatform на iOS, малый размер (две фичи), офлайн-изменения не нужны (P5).
+
+Задачи — эпизоды из `GET https://rickandmortyapi.com/api/episode` (все страницы).
+Работа с данными — offline-first:
+
+- экраны читают задачи только из Room; `refresh()` загружает эпизоды и **заменяет кэш
+  одной транзакцией**, поэтому записи, удалённые на сервере, не остаются в базе;
+- **стратегия изменений (DATA-4) — «сначала хранилище»**: отметка «просмотрено» пишется
+  в отдельную таблицу `task_completion` и не затрагивается заменой кэша. Очереди
+  синхронизации нет: Rick and Morty API только на чтение, отправлять изменения некуда.
+  Если появится бэкенд с записью, отметки отправляются через очередь синхронизации;
+- ошибки сети и HTTP-коды переводит в `AppError` `core:network` (`networkResultOf`),
+  неожиданные исключения становятся `AppError.Unknown` и логируются через `Logger`.
+
+Схема базы экспортируется в `feature/tasks/data/schemas`. Миграция 1 → 2 (переход с общей
+`AppDatabase` с демо-задачами) покрыта тестом `TasksMigrationTest`.
 
 ## Тесты
 
-Юнит-тесты лежат в `commonTest` и гоняются на `iosSimulatorArm64Test` (JVM-таргета
-у чисто общих модулей нет):
+Общие тесты лежат в `commonTest` и запускаются на JVM (Linux-раннер CI) и на
+iOS-симуляторе; тесты с настоящей Room в памяти и миграции — в `jvmTest` модуля
+`feature:tasks:data`. Fake живут в одном месте: `core:testing` и `feature:tasks:testing`.
 
-- `core`: `DispatcherProviderTest`
-- `feature/tasks`: `TaskUseCasesTest`, `TasksViewModelTest`, `TasksFeatureModuleTest` (граф Koin)
-- `feature/history`: `GetTaskHistoryUseCaseTest`, `TaskHistoryRepositoryImplTest`
+- `core`: `AppResultTest`, `DispatcherProviderTest`; `core:network`: `NetworkResultTest` (`MockEngine`)
+- `feature/tasks`: `TaskUseCasesTest`, `TaskRepositoryImplTest`, `TaskMappersTest`,
+  `TasksDatabaseTest`, `TasksMigrationTest`, `TasksViewModelTest`, `TasksFeatureModuleTest` (граф Koin)
+- `feature/history`: `GetTaskHistoryUseCaseTest`, `TaskHistoryRepositoryImplTest`,
+  `HistoryViewModelTest`, `HistoryFeatureModuleTest` (граф Koin)
 
 ```bash
-./gradlew allTests
+./gradlew jvmTest
+```
+
+```bash
+./gradlew iosSimulatorArm64Test
 ```
 
 ## Сборка
 
 ```bash
-# Android
 ./gradlew :androidApp:assembleDebug
+```
 
-# Проверка общего кода без таргет-специфичной компиляции
-./gradlew compileKotlinMetadata
+Стиль и статический анализ (то же запускает CI):
+
+```bash
+./gradlew ktlintCheck detektAll
 ```
 
 iOS-приложение собирается и запускается через Xcode-проект в [iosApp](iosApp).
+
+## Риски обновления
+
+- **detekt 2.0.0-alpha.6** — предрелизная версия: стабильная 2.0 ещё не вышла
+  (см. раздел 15 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)). Используется только при сборке,
+  в код приложения не попадает. При обновлении проверить правила и `config/detekt/detekt.yml`.
+- **Экспериментальные API Material 3** (`TopAppBar`, `PullToRefreshBox`) спрятаны в
+  `design-system`; при обновлении Material 3 правки нужны только там.
+
+Осознанные отступления от архитектурного документа записаны в
+[docs/deviations.md](docs/deviations.md).
