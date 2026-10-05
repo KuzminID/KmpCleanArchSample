@@ -1,44 +1,24 @@
 package ru.marwinka.kmpcleanarchsample.core
 
-sealed class AppError(
-    override val message: String,
-    override val cause: Throwable? = null,
-) : Throwable(message, cause) {
-    class Network(
-        cause: Throwable? = null,
-    ) : AppError("Network error", cause)
+/**
+ * Типизированная ошибка операции. Это данные, а не исключение: её нельзя бросить, только вернуть
+ * в [AppResult.Failure]. Текста для пользователя здесь нет — его подбирает экран по типу ошибки.
+ */
+sealed interface AppError {
+    val cause: Throwable?
 
-    class NotFound(
-        cause: Throwable? = null,
-    ) : AppError("Not found", cause)
+    /** Нет соединения, таймаут или ответ сервера 5xx. */
+    data class Network(
+        override val cause: Throwable? = null,
+    ) : AppError
 
-    class Unknown(
-        cause: Throwable? = null,
-    ) : AppError(cause?.message ?: "Unknown error", cause)
+    /** Запрошенный ресурс не найден (HTTP 404). */
+    data class NotFound(
+        override val cause: Throwable? = null,
+    ) : AppError
+
+    /** Всё неожиданное; такие ошибки обязательно логируются. */
+    data class Unknown(
+        override val cause: Throwable? = null,
+    ) : AppError
 }
-
-fun Throwable.toAppError(): AppError =
-    when (this) {
-        is AppError -> this
-        else -> AppError.Unknown(this)
-    }
-
-sealed interface AppResult<out T> {
-    data class Success<out T>(
-        val value: T,
-    ) : AppResult<T>
-
-    data class Failure(
-        val error: AppError,
-    ) : AppResult<Nothing>
-}
-
-/** Выполняет [block] и превращает исключение в [AppResult.Failure]; отмену корутины пробрасывает дальше. */
-suspend fun <T> appResultOf(block: suspend () -> T): AppResult<T> =
-    try {
-        AppResult.Success(block())
-    } catch (t: kotlinx.coroutines.CancellationException) {
-        throw t
-    } catch (t: Throwable) {
-        AppResult.Failure(t.toAppError())
-    }

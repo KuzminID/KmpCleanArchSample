@@ -10,20 +10,15 @@ interface DispatcherProvider {
 }
 
 /**
- Количество параллельных потоков диспетчера IO
-*/
-private const val IO_PARALLELISM = 64
-
-/**
- [Dispatchers.IO] на Kotlin/Native объявлен `internal` — недоступен даже из
- iosMain модуля-потребителя, так что expect/actual тут не помог бы. Кросс-
- платформенная замена — `limitedParallelism` поверх [Dispatchers.Default]:
- тот же общий пул, но с более высоким лимитом одновременных задач, что и
- позволяет не простаивать на блокирующих I/O-вызовах, дожидаясь освобождения
- потоков, занятых CPU-bound работой на [default].
+ * `Dispatchers.IO` есть на JVM, Android и Kotlin/Native, но не объявлен в общем коде,
+ * поэтому приходит из платформенных source set'ов. Замена через
+ * `Dispatchers.Default.limitedParallelism(n)` не работает: при `n` больше числа ядер
+ * она возвращает сам `Default`, и блокирующий I/O занимает потоки CPU-задач.
  */
+internal expect val ioDispatcher: CoroutineDispatcher
+
 class DefaultDispatcherProvider : DispatcherProvider {
-    override val io: CoroutineDispatcher = Dispatchers.Default.limitedParallelism(IO_PARALLELISM)
+    override val io: CoroutineDispatcher = ioDispatcher
     override val default: CoroutineDispatcher = Dispatchers.Default
     override val main: CoroutineDispatcher = Dispatchers.Main
 }
