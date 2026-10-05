@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="history_empty">Пока нет завершённых задач</string>
-    <string name="history_duration_minutes">%1$d мин</string>
+    <string name="history_empty">Пока нет просмотренных эпизодов</string>
 </resources>

@@ -2,8 +2,9 @@
 <resources>
     <string name="tasks_error_network">Нет соединения. Проверьте сеть и повторите.</string>
     <string name="tasks_error_not_found">Задачи не найдены.</string>
-    <string name="tasks_error_unknown">Не удалось загрузить задачи.</string>
+    <string name="tasks_error_unknown">Не удалось выполнить действие.</string>
     <string name="tasks_retry">Повторить</string>
-    <string name="task_details_title">Задача</string>
+    <string name="tasks_empty">Все эпизоды просмотрены</string>
+    <string name="task_details_title">Эпизод</string>
     <string name="task_details_back">Назад</string>
 </resources>

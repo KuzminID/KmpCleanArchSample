@@ -9,24 +9,22 @@ import kotlinx.coroutines.flow.stateIn
 import ru.marwinka.kmpcleanarchsample.feature.history.domain.model.TaskHistoryEntry
 import ru.marwinka.kmpcleanarchsample.feature.history.domain.usecase.GetTaskHistoryUseCase
 
-sealed interface HistoryUiState {
-    data object Loading : HistoryUiState
-
-    data class Content(
-        val entries: List<TaskHistoryEntry>,
-    ) : HistoryUiState
-}
+data class HistoryUiState(
+    val entries: List<TaskHistoryEntry> = emptyList(),
+    /** Хранилище ещё не отдало первую эмиссию. */
+    val isLoading: Boolean = true,
+)
 
 class HistoryViewModel(
     getTaskHistory: GetTaskHistoryUseCase,
 ) : ViewModel() {
-    val state: StateFlow<HistoryUiState> =
+    val uiState: StateFlow<HistoryUiState> =
         getTaskHistory()
-            .map<_, HistoryUiState> { entries -> HistoryUiState.Content(entries) }
+            .map { entries -> HistoryUiState(entries = entries, isLoading = false) }
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-                initialValue = HistoryUiState.Loading,
+                initialValue = HistoryUiState(),
             )
 
     private companion object {

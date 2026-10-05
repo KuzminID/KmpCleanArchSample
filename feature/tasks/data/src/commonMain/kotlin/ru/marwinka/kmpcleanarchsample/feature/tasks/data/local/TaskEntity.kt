@@ -3,17 +3,28 @@ package ru.marwinka.kmpcleanarchsample.feature.tasks.data.local
 import androidx.room3.Entity
 import androidx.room3.PrimaryKey
 
-/** Значения колонки `status`; единственное место, где они записаны. */
-object TaskStatus {
-    const val ACTIVE = "ACTIVE"
-    const val DONE = "DONE"
-}
-
-@Entity(tableName = "taskEntity")
-data class TaskEntity(
+/** Кэш задач с сервера. Целиком заменяется при каждом `refresh`. */
+@Entity(tableName = "task")
+internal data class TaskEntity(
     @PrimaryKey val id: String,
     val title: String,
-    val status: String,
-    val createdAt: Long,
-    val completedAt: Long?,
+    /** Порядок, в котором задачи пришли с сервера. */
+    val position: Int,
+)
+
+/**
+ * Отметка пользователя «выполнено». Сервер её не принимает (API только на чтение),
+ * поэтому она живёт в отдельной таблице и не затрагивается заменой кэша.
+ */
+@Entity(tableName = "task_completion")
+internal data class TaskCompletionEntity(
+    @PrimaryKey val taskId: String,
+    val completedAt: Long,
+)
+
+/** Строка запроса выполненных задач: задача из кэша и время отметки. */
+internal data class CompletedTaskRow(
+    val id: String,
+    val title: String,
+    val completedAt: Long,
 )

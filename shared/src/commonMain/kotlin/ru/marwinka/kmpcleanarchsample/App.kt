@@ -10,8 +10,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -20,9 +18,8 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import ru.marwinka.kmpcleanarchsample.designsystem.AppTheme
 import ru.marwinka.kmpcleanarchsample.feature.history.presentation.HistoryTab
-import ru.marwinka.kmpcleanarchsample.feature.tasks.presentation.TasksDestination
 import ru.marwinka.kmpcleanarchsample.feature.tasks.presentation.TasksTab
-import ru.marwinka.kmpcleanarchsample.feature.tasks.presentation.tasksStartDestination
+import ru.marwinka.kmpcleanarchsample.feature.tasks.presentation.rememberTasksBackStack
 import ru.marwinka.kmpcleanarchsample.resources.Res
 import ru.marwinka.kmpcleanarchsample.resources.tab_history
 import ru.marwinka.kmpcleanarchsample.resources.tab_tasks
@@ -40,8 +37,8 @@ private enum class AppTab(
 fun App() {
     AppTheme {
         var selectedTab by rememberSaveable { mutableIntStateOf(AppTab.Tasks.ordinal) }
-        // Hoisted here so the tab keeps its stack (e.g. an open task) while another tab is shown.
-        val tasksBackStack = remember { mutableStateListOf<TasksDestination>(tasksStartDestination()) }
+        // Стек поднят сюда, чтобы вкладка помнила открытый экран, пока показана другая вкладка.
+        val tasksBackStack = rememberTasksBackStack()
 
         Scaffold(
             modifier = Modifier.safeDrawingPadding(),

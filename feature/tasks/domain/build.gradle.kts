@@ -9,7 +9,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {
-            implementation(libs.kotlinx.coroutines.core)
+            implementation(project(":feature:tasks:testing"))
         }
     }
 }

@@ -4,5 +4,4 @@ data class TaskHistoryEntry(
     val id: String,
     val title: String,
     val completedAtEpochMillis: Long,
-    val durationMillis: Long,
 )

@@ -1,45 +1,19 @@
 package ru.marwinka.kmpcleanarchsample.feature.tasks.domain.usecase
 
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import ru.marwinka.kmpcleanarchsample.core.AppResult
 import ru.marwinka.kmpcleanarchsample.feature.tasks.domain.model.Task
-import ru.marwinka.kmpcleanarchsample.feature.tasks.domain.repository.TaskRepository
+import ru.marwinka.kmpcleanarchsample.feature.tasks.testing.FakeTaskRepository
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
-
-/**
- * A hand-written fake, not a mocking framework — the whole point of the
- * repository/use-case split is that this is all a use-case test needs.
- *
- * RU: Написанный вручную фейк, а не мок-фреймворк — в этом весь смысл разделения
- * repository/use-case: тесту use-case больше ничего и не требуется.
- */
-private class FakeTaskRepository(
-    private val tasks: List<Task>,
-) : TaskRepository {
-    var completedId: String? = null
-        private set
-
-    override fun observeActive(): Flow<List<Task>> = flowOf(tasks)
-
-    override suspend fun refresh(): AppResult<Unit> = AppResult.Success(Unit)
-
-    override suspend fun complete(id: String): AppResult<Unit> {
-        completedId = id
-        return AppResult.Success(Unit)
-    }
-}
 
 class TaskUseCasesTest {
-    private val tasks = listOf(Task(id = "1", title = "Write a test", createdAtEpochMillis = 0))
+    private val tasks = listOf(Task(id = "1", title = "S01E01 · Pilot"))
 
     @Test
     fun getActiveTasks_returns_tasks_from_repository() =
-        runBlocking {
+        runTest {
             val useCase = GetActiveTasksUseCase(FakeTaskRepository(tasks))
 
             assertEquals(tasks, useCase().first())
@@ -47,12 +21,22 @@ class TaskUseCasesTest {
 
     @Test
     fun completeTask_delegates_to_repository() =
-        runBlocking {
+        runTest {
             val repository = FakeTaskRepository(tasks)
-            assertNull(repository.completedId)
 
-            CompleteTaskUseCase(repository)("1")
+            val result = CompleteTaskUseCase(repository)("1")
 
-            assertEquals("1", repository.completedId)
+            assertEquals(AppResult.Success(Unit), result)
+            assertEquals(listOf("1"), repository.completedIds)
+        }
+
+    @Test
+    fun refreshTasks_delegates_to_repository() =
+        runTest {
+            val repository = FakeTaskRepository()
+
+            RefreshTasksUseCase(repository)()
+
+            assertEquals(1, repository.refreshCalls)
         }
 }

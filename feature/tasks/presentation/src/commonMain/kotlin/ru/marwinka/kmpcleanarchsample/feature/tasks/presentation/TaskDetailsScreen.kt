@@ -6,12 +6,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import org.jetbrains.compose.resources.stringResource
+import ru.marwinka.kmpcleanarchsample.designsystem.AppTopBar
 import ru.marwinka.kmpcleanarchsample.feature.tasks.presentation.resources.Res
 import ru.marwinka.kmpcleanarchsample.feature.tasks.presentation.resources.task_details_back
 import ru.marwinka.kmpcleanarchsample.feature.tasks.presentation.resources.task_details_title
@@ -25,11 +25,11 @@ internal fun TaskDetailsScreen(
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(Res.string.task_details_title)) },
+            AppTopBar(
+                title = stringResource(Res.string.task_details_title),
                 navigationIcon = {
-                    // TextButton, not IconButton: IconButton is a fixed 48dp square sized for an icon
-                    // and wraps a word like "Назад" onto two lines.
+                    // TextButton, а не IconButton: IconButton — квадрат 48dp под иконку,
+                    // слово «Назад» в нём переносится на две строки.
                     TextButton(onClick = onBack) {
                         Text(stringResource(Res.string.task_details_back))
                     }
@@ -46,5 +46,5 @@ internal fun TaskDetailsScreen(
 @Preview
 @Composable
 private fun TaskDetailsScreenPreview() {
-    TaskDetailsScreen(title = "Write the architecture doc", onBack = {})
+    TaskDetailsScreen(title = "S01E01 · Pilot", onBack = {})
 }

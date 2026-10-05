@@ -1,15 +1,35 @@
 plugins {
-    // this is necessary to avoid the plugins to be loaded multiple times
-    // in each subproject's classloader
-    // RU: это нужно, чтобы плагины не загружались повторно в classloader'е каждого подпроекта
+    // Плагины объявляются здесь, чтобы они не загружались повторно в classloader'е каждого подпроекта.
     alias(libs.plugins.androidApplication) apply false
     alias(libs.plugins.composeCompiler) apply false
     alias(libs.plugins.ktlint) apply false
+    alias(libs.plugins.detekt) apply false
 }
 
+val ktlintVersion = libs.versions.ktlint.asProvider().get()
+
 subprojects {
+    apply(plugin = "dev.detekt")
+    extensions.configure<dev.detekt.gradle.extensions.DetektExtension> {
+        buildUponDefaultConfig.set(true)
+        config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+        parallel.set(true)
+    }
+    // Сгенерированный код (Room KSP, Compose Resources) не анализируется.
+    tasks.withType<dev.detekt.gradle.Detekt>().configureEach {
+        exclude { it.file.invariantSeparatorsPath.contains("/build/") }
+    }
+    // В KMP-модулях detekt создаёт задачу на каждый source set; detektAll запускает их все.
+    tasks.register("detektAll") {
+        group = "verification"
+        description = "Runs detekt for every source set of the module."
+        dependsOn(tasks.withType<dev.detekt.gradle.Detekt>().matching { it.name.endsWith("SourceSet") || it.name == "detekt" })
+    }
+
     apply(plugin = "org.jlleitschuh.gradle.ktlint")
     extensions.configure<org.jlleitschuh.gradle.ktlint.KtlintExtension> {
+        // Версия форматтера задаётся только в каталоге версий (BLD-6).
+        version.set(ktlintVersion)
         // Сгенерированный код (Compose Resources Res.kt и т.п.) не наш стиль — не линтим его.
         filter {
             exclude("**/build/**")
@@ -18,45 +38,79 @@ subprojects {
 }
 
 // Проверка границ модулей на этапе конфигурации: любая сборка падает на запрещённой
-// зависимости между проектами, а не полагается на ревью. Правила — из архитектурного документа:
-//  - core, design-system и общие модули хранения data:* (если появятся) не знают о фичах и о shared;
-//  - api фичи не зависит ни от каких модулей фич; domain — только от api своей фичи;
-//  - presentation и domain не видят data (ни свой, ни data:*); di не видит никто, кроме shared;
-//  - другая фича видна только через её api.
-// Тестовые конфигурации не проверяются.
+// зависимости, а не полагается на ревью (правила MOD-1…MOD-5, MOD-9 docs/ARCHITECTURE.md).
+// Проверяются объявленные зависимости основного кода; тестовые конфигурации не проверяются.
+//  - core и design-system не знают о фичах и о shared; core (common) не зависит от других core;
+//  - модули testing подключаются только в тесты;
+//  - di фичи подключает только shared; другая фича видна только через её api;
+//  - api и domain зависят только от core и (domain) от api своей фичи; их внешние библиотеки —
+//    только Kotlin и корутины: ни UI, ни хранилища, ни сети, ни DI, ни сериализации;
+//  - presentation и data не видят друг друга; presentation не видит хранилище и сеть
+//    (ни core:database / core:network, ни Room, SQLite, Ktor).
 gradle.projectsEvaluated {
-    val featureLayer = Regex("^:feature:([^:]+):(api|domain|data|presentation|di)$")
+    val featureLayer = Regex("^:feature:([^:]+):(api|domain|data|presentation|di|testing)$")
+    val declaredConfiguration = Regex("^.*(Implementation|Api|CompileOnly|RuntimeOnly)$|^(implementation|api|compileOnly|runtimeOnly)$")
+    val pureKotlinLibraries = listOf("org.jetbrains.kotlin:", "org.jetbrains.kotlinx:kotlinx-coroutines-")
+    val storageAndNetworkLibraries = listOf("androidx.room", "androidx.sqlite:", "io.ktor:")
+
+    fun isCore(path: String) = path == ":core" || path.startsWith(":core:")
+
+    fun isTesting(path: String) = path == ":core:testing" || featureLayer.matchEntire(path)?.groupValues?.get(2) == "testing"
+
     val violations = mutableListOf<String>()
     subprojects.forEach { module ->
         val from = module.path
         val fromFeature = featureLayer.matchEntire(from)
-        val fromInfrastructure = from == ":core" || from.startsWith(":core:") || from == ":design-system" || from.startsWith(":data:")
-        module.configurations
-            .filter { !it.name.contains("test", ignoreCase = true) }
+        val fromLayer = fromFeature?.groupValues?.get(2)
+        val configurations =
+            module.configurations.filter {
+                declaredConfiguration.matches(it.name) && !it.name.contains("test", ignoreCase = true)
+            }
+
+        configurations
             .flatMap { it.dependencies.withType<ProjectDependency>() }
             .map { it.path }
             .distinct()
             .forEach { to ->
                 val toFeature = featureLayer.matchEntire(to)
                 val toLayer = toFeature?.groupValues?.get(2)
+                val sameFeature = toFeature != null && fromFeature?.groupValues?.get(1) == toFeature.groupValues[1]
                 val reason =
                     when {
-                        fromInfrastructure && (toFeature != null || to == ":shared") ->
-                            "infrastructure modules must not know about features or shared"
+                        (isCore(from) || from == ":design-system") && (toFeature != null || to == ":shared") ->
+                            "core and design-system must not know about features or shared"
+                        from == ":core" && isCore(to) -> "core (common) must not depend on other core modules"
+                        isTesting(to) && !isTesting(from) -> "testing modules may be used only by tests"
+                        toLayer == "di" && from != ":shared" -> "only shared may depend on a feature's di"
                         fromFeature == null -> null
-                        toLayer == "di" && fromFeature.groupValues[2] != "di" -> "only shared may depend on a feature's di"
-                        fromFeature.groupValues[2] in setOf("domain", "presentation", "api") && to.startsWith(":data:") ->
-                            "${fromFeature.groupValues[2]} must not depend on data"
-                        toFeature == null -> null
-                        fromFeature.groupValues[1] != toFeature.groupValues[1] ->
-                            if (toLayer == "api") null else "another feature is visible only through its api"
-                        fromFeature.groupValues[2] == "api" -> "api must not depend on feature modules"
-                        fromFeature.groupValues[2] == "domain" && toLayer != "api" -> "domain may depend only on its feature's api"
-                        fromFeature.groupValues[2] in setOf("presentation", "data") && toLayer in setOf("data", "presentation") ->
-                            "${fromFeature.groupValues[2]} must not depend on $toLayer"
+                        toFeature != null && !sameFeature && toLayer != "api" -> "another feature is visible only through its api"
+                        fromLayer == "api" && to != ":core" -> "api may depend only on core"
+                        fromLayer == "domain" && to != ":core" && !(sameFeature && toLayer == "api") ->
+                            "domain may depend only on core and its feature's api"
+                        fromLayer == "presentation" && to in setOf(":core:network", ":core:database") ->
+                            "presentation must not depend on storage or network"
+                        fromLayer == "presentation" && sameFeature && toLayer != "domain" -> "presentation may depend only on its domain"
+                        fromLayer == "data" && sameFeature && toLayer !in setOf("domain", "api") -> "data must not depend on $toLayer"
+                        fromLayer == "testing" && sameFeature && toLayer !in setOf("domain", "api") -> "testing must not depend on $toLayer"
                         else -> null
                     }
                 if (reason != null) violations += "$from -> $to: $reason"
+            }
+
+        configurations
+            .flatMap { it.dependencies.withType<ExternalModuleDependency>() }
+            .map { "${it.group}:${it.name}" }
+            .distinct()
+            .forEach { library ->
+                val reason =
+                    when (fromLayer) {
+                        "api", "domain" ->
+                            if (pureKotlinLibraries.none(library::startsWith)) "$fromLayer may use only Kotlin and coroutines" else null
+                        "presentation" ->
+                            if (storageAndNetworkLibraries.any(library::startsWith)) "presentation must not use storage or network" else null
+                        else -> null
+                    }
+                if (reason != null) violations += "$from -> $library: $reason"
             }
     }
     if (violations.isNotEmpty()) {
@@ -66,7 +120,7 @@ gradle.projectsEvaluated {
 
 // Генератор скелета новой фичи: domain/data/presentation/di как отдельные Gradle-модули,
 // по образцу feature/tasks и feature/history.
-// RU: ./gradlew newFeature -PfeatureName=reminders
+// Пример: ./gradlew newFeature -PfeatureName=reminders
 tasks.register("newFeature") {
     group = "template"
     description = "Scaffolds a new feature module set (domain/data/presentation/di). Usage: -PfeatureName=<name>"
@@ -116,7 +170,7 @@ tasks.register("newFeature") {
                             implementation(libs.kotlinx.coroutines.core)
                         }
                         commonTest.dependencies {
-                            implementation(libs.kotlinx.coroutines.core)
+                            implementation(project(":core:testing"))
                         }
                     }
                 }
@@ -125,8 +179,8 @@ tasks.register("newFeature") {
                 # $gradlePath:domain
 
                 Модели, интерфейс репозитория, use case'ы. Никакого Android/Compose/Room/Ktor —
-                только `core` и `kotlinx.coroutines`. Тесты use case'ов (с рукописными фейками
-                репозитория) кладутся сюда же, в `commonTest`.
+                только `core` и `kotlinx.coroutines` (проверяется сборкой). Use case заводится,
+                только если в нём есть логика (DOM-4). Тесты — в `commonTest` через `runTest`.
             """.trimIndent() + "\n",
         )
         sourceDir("domain", "commonTest").resolve(".gitkeep").writeText("")
@@ -143,11 +197,14 @@ tasks.register("newFeature") {
                         commonMain.dependencies {
                             implementation(project(":core"))
                             implementation(project("$gradlePath:domain"))
-                            // TODO: Room-сущности и DAO фичи — здесь (api(libs.androidx.room3.runtime)), сущность добавить в AppDatabase в :shared;
-                            // сеть — через HttpClient из :core:network.
-                            // api (не implementation), если Entity/Dao из data-модуля входят в публичный
-                            // конструктор *RepositoryImpl — на него ссылается $gradlePath:di.
+                            implementation(libs.koin.core)
                             implementation(libs.kotlinx.coroutines.core)
+                            // TODO: сеть — implementation(project(":core:network")), вызовы через networkResultOf;
+                            // своя база — implementation(project(":core:database")) и плагины ksp/room3
+                            // по образцу feature/tasks/data.
+                        }
+                        commonTest.dependencies {
+                            implementation(project(":core:testing"))
                         }
                     }
                 }
@@ -155,10 +212,9 @@ tasks.register("newFeature") {
             readme = """
                 # $gradlePath:data
 
-                Реализация интерфейса репозитория из `:domain`. Класс `*RepositoryImpl` должен
-                быть публичным (не `internal`) — на него по имени ссылается `:di`, а Kotlin
-                `internal` не пересекает границы Gradle-модулей. Мапит Entity/DTO источника
-                данных в domain-модель.
+                Реализация интерфейса репозитория из `:domain`. Реализации, Entity, DAO и DTO
+                объявляются `internal`; наружу модуль отдаёт только Koin-модуль `<name>DataModule`,
+                который подключает `:di`. Мапперы лежат в отдельном файле и покрыты тестами.
             """.trimIndent() + "\n",
         )
 
@@ -167,6 +223,7 @@ tasks.register("newFeature") {
             buildFile = """
                 plugins {
                     id("kmpcleanarchsample.kmp.compose")
+                    alias(libs.plugins.kotlinSerialization)
                 }
 
                 kotlin {
@@ -177,6 +234,7 @@ tasks.register("newFeature") {
                             implementation(project(":design-system"))
                             implementation(libs.koin.core)
                             implementation(libs.kotlinx.coroutines.core)
+                            implementation(libs.kotlinx.serialization.core)
                             implementation(libs.compose.runtime)
                             implementation(libs.compose.foundation)
                             implementation(libs.compose.material3)
@@ -195,8 +253,9 @@ tasks.register("newFeature") {
             readme = """
                 # $gradlePath:presentation
 
-                `ViewModel` + `StateFlow<UiState>` (через `stateIn`), пара `Route`/`Content`
-                (stateful/stateless) с `@Preview`, ключи навигации и `NavDisplay` вкладки
+                `ViewModel` с `uiState: StateFlow<UiState>` (через `stateIn`) и методами `onXxx`,
+                пара `XxxRoute`/`XxxScreen(uiState, onXxx, modifier)` с превью каждого состояния,
+                `@Serializable`-ключи `NavKey` и `NavDisplay` вкладки на `rememberNavBackStack`
                 (Navigation 3; ViewModel привязана к записи back stack).
                 Зависит только от `:domain` (use case'ы) — НЕ от `:data`. Реализация
                 репозитория подставляется через Koin в `:di`.
@@ -225,9 +284,9 @@ tasks.register("newFeature") {
             readme = """
                 # $gradlePath:di
 
-                Koin-модуль фичи: связывает интерфейс репозитория из `:domain` с реализацией
-                из `:data`, регистрирует use case'ы и ViewModel (`viewModelOf`) из `:presentation`.
-                Подключается в `shared`/`Koin.kt` вместе с `:presentation` (для вкладки).
+                Koin-модуль фичи: подключает `<name>DataModule` из `:data`, регистрирует use case'ы
+                и ViewModel (`viewModelOf`) из `:presentation`. Тест графа в `commonTest`
+                разрешает репозиторий и ViewModel (DI-3). Подключается в `shared`/`Koin.kt`.
             """.trimIndent() + "\n",
         )
 
@@ -246,9 +305,9 @@ tasks.register("newFeature") {
 
             Осталось вручную:
               1. Заполнить domain (модель, интерфейс репозитория, use case'ы).
-              2. Реализовать репозиторий в data (см. TODO про источник данных в data/build.gradle.kts).
-              3. Написать ViewModel, Route/Content и NavDisplay вкладки в presentation (образец — feature/tasks).
-              4. Собрать Koin-модуль в di и подключить его в shared/Koin.kt (modules(...)).
+              2. Реализовать репозиторий в data (internal) и Koin-модуль <name>DataModule; см. TODO в data/build.gradle.kts.
+              3. Написать ViewModel, Route/Screen и NavDisplay вкладки в presentation (образец — feature/tasks).
+              4. Собрать Koin-модуль в di (includes(<name>DataModule)), написать тест графа и подключить его в shared/Koin.kt.
               5. Добавить в shared/build.gradle.kts:
                    implementation(project("$gradlePath:presentation"))
                    implementation(project("$gradlePath:di"))

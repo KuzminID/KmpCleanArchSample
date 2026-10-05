@@ -1,34 +1,36 @@
 package ru.marwinka.kmpcleanarchsample.feature.tasks.data.remote
 
-import kotlinx.coroutines.delay
-import kotlinx.serialization.Serializable
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.request.get
+import io.ktor.client.request.parameter
+import ru.marwinka.kmpcleanarchsample.core.AppResult
+import ru.marwinka.kmpcleanarchsample.core.Logger
+import ru.marwinka.kmpcleanarchsample.core.network.networkResultOf
 
-@Serializable
-data class TaskDto(
-    val id: String,
-    val title: String,
-)
-
-interface TaskApi {
-    suspend fun fetchTasks(): List<TaskDto>
+/** Удалённый источник задач фичи. Ошибки типизирует `core:network`. */
+internal interface TaskApi {
+    suspend fun fetchEpisodes(): AppResult<List<EpisodeDto>>
 }
 
-/**
- * Mock-реализация API класса
- */
-class FakeTaskApi : TaskApi {
-    override suspend fun fetchTasks(): List<TaskDto> {
-        delay(400)
-        return seedTasks
-    }
+internal class KtorTaskApi(
+    private val client: HttpClient,
+    private val logger: Logger,
+) : TaskApi {
+    override suspend fun fetchEpisodes(): AppResult<List<EpisodeDto>> =
+        networkResultOf(logger) {
+            buildList {
+                var page = 1
+                do {
+                    val response = client.get("episode") { parameter("page", page) }.body<EpisodePageDto>()
+                    addAll(response.results)
+                    page++
+                } while (response.info.next != null && page <= MAX_PAGES)
+            }
+        }
 
     private companion object {
-        val seedTasks =
-            listOf(
-                TaskDto(id = "1", title = "Набросать граф Gradle-модулей"),
-                TaskDto(id = "2", title = "Настроить Room"),
-                TaskDto(id = "3", title = "Подключить Koin"),
-                TaskDto(id = "4", title = "Собрать iOS-фреймворк"),
-            )
+        /** Защита от бесконечного цикла, если сервер всегда отдаёт `next`; эпизодов сейчас 3 страницы. */
+        const val MAX_PAGES = 20
     }
 }
