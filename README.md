@@ -1,3 +1,5 @@
+[![CI](https://github.com/KuzminID/KmpCleanArchSample/actions/workflows/ci.yml/badge.svg)](https://github.com/KuzminID/KmpCleanArchSample/actions/workflows/ci.yml)
+
 # KMPCleanArchSample
 
 Пример мультиплатформенного приложения (Android + iOS) на Kotlin Multiplatform и
